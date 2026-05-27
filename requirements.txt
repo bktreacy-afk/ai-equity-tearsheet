@@ -1,0 +1,6 @@
+flask
+yfinance
+newsapi-python
+anthropic
+python-dotenv
+numpy

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial Tearsheet - Home</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #0d1117;
+            color: #e6edf3;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 600px;
+            width: 90%;
+            padding: 40px;
+        }
+
+        h1 {
+            font-size: 48px;
+            font-weight: bold;
+            color: #58a6ff;
+            margin-bottom: 20px;
+        }
+
+        .subtitle {
+            font-size: 18px;
+            color: #8b949e;
+            margin-bottom: 40px;
+        }
+
+        .search-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 15px 20px;
+            font-size: 16px;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            background-color: #161b22;
+            color: #e6edf3;
+            outline: none;
+            transition: border-color 0.2s;
+            text-transform: uppercase;
+        }
+
+        input[type="text"]:focus {
+            border-color: #58a6ff;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #ffffff;
+            background-color: #58a6ff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #4094ff;
+        }
+
+        .examples {
+            margin-top: 30px;
+            color: #8b949e;
+            font-size: 14px;
+        }
+
+        .examples span {
+            color: #58a6ff;
+            cursor: pointer;
+            text-decoration: underline;
+            margin: 0 5px;
+        }
+
+        .examples span:hover {
+            color: #4094ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Financial Tearsheet</h1>
+        <p class="subtitle">Enter a stock ticker to view comprehensive financial analysis</p>
+        
+        <form action="/tearsheet" method="GET" class="search-container">
+            <input type="text" name="ticker" placeholder="Enter stock ticker (e.g., AAPL, GOOGL, MSFT)" required>
+            <button type="submit">Search</button>
+        </form>
+        
+        <div class="examples">
+            Try: <span onclick="search('AAPL')">AAPL</span>
+            <span onclick="search('GOOGL')">GOOGL</span>
+            <span onclick="search('MSFT')">MSFT</span>
+            <span onclick="search('TSLA')">TSLA</span>
+        </div>
+    </div>
+
+    <script>
+        function search(ticker) {
+            window.location.href = `/tearsheet?ticker=${ticker}`;
+        }
+    </script>
+</body>
+</html>
