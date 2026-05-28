@@ -732,6 +732,38 @@ def generate_html_tearsheet(ticker, company_name, financial_data, headlines, ai_
         rev_beat_val = "N/A"
         rev_beat_color = "#8b949e"
 
+    # ── Pre-compute analyst price target upside ──────────────────────────────
+    target_mean = financial_data.get('target_mean_price', 'N/A')
+    target_high = financial_data.get('target_high_price', 'N/A')
+    target_low  = financial_data.get('target_low_price', 'N/A')
+    try:
+        tp_mean = float(target_mean); tp_high = float(target_high); tp_low = float(target_low)
+        tp_up_pct = ((tp_mean - price_val) / price_val) * 100 if price_val else 0
+        tp_upside_str   = f"{tp_up_pct:+.1f}%"
+        tp_upside_color = '#3fb950' if tp_up_pct >= 0 else '#f85149'
+        tp_range_str    = f"${tp_low:,.2f} – ${tp_high:,.2f}"
+        tp_mean_str     = f"${tp_mean:,.2f}"
+    except:
+        tp_upside_str = ''; tp_upside_color = '#8b949e'; tp_range_str = 'N/A'
+        raw = analyst_data.get('target_price', 'N/A')
+        try:    tp_mean_str = f"${float(raw):,.2f}"
+        except: tp_mean_str = str(raw)
+
+    # ── Pre-compute DCF defaults ───────────────────────────────────────────────
+    def _n(v, d=0):
+        try: return float(v)
+        except: return d
+    dcf_revenue       = _n(financial_data.get('total_revenue'))
+    dcf_cash          = _n(financial_data.get('total_cash'))
+    dcf_debt          = _n(financial_data.get('total_debt'))
+    dcf_shares        = _n(financial_data.get('shares_outstanding'))
+    dcf_price         = price_val
+    raw_growth        = financial_data.get('revenue_growth', 'N/A')
+    dcf_g1            = round(max(0, min(50, _n(raw_growth, 0.08) * 100)), 1)
+    dcf_g2            = round(max(0, min(25, dcf_g1 * 0.5)), 1)
+    raw_em            = financial_data.get('ebitda_margins', 'N/A')
+    dcf_margin_default= round(max(1, min(60, _n(raw_em, 0.15) * 100)), 1)
+
     # Generate HTML content
     html_content = f"""
 <!DOCTYPE html>
@@ -1334,6 +1366,15 @@ def generate_html_tearsheet(ticker, company_name, financial_data, headlines, ai_
             border-top: 1px solid #30363d;
             margin-top: 30px;
         }}
+        /* DCF Calculator */
+        .dcf-input-group {{ display:flex; flex-direction:column; gap:4px; }}
+        .dcf-label {{ font-size:11px; color:#8b949e; text-transform:uppercase; letter-spacing:.04em; }}
+        .dcf-input-wrap {{ display:flex; align-items:center; background:#0d1117; border:1px solid #30363d; border-radius:6px; padding:0 10px; }}
+        .dcf-input {{ background:transparent; border:none; outline:none; color:#e6edf3; font-size:14px; font-weight:600; width:100%; padding:8px 0; }}
+        .dcf-unit  {{ color:#8b949e; font-size:13px; margin-left:4px; }}
+        .dcf-result-value  {{ font-size:36px; font-weight:700; color:#e6edf3; letter-spacing:-.02em; }}
+        .dcf-result-upside {{ font-size:18px; font-weight:600; margin-top:6px; }}
+        .dcf-result-label  {{ font-size:11px; color:#8b949e; text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px; }}
     </style>
 </head>
 <body>
@@ -1478,8 +1519,15 @@ def generate_html_tearsheet(ticker, company_name, financial_data, headlines, ai_
                     <div class="analyst-value" style="background-color: {rec_color}; color: {rec_text_color}; padding: 3px 10px; border-radius: 8px; font-weight: bold; font-size: 12px; display: inline-block; white-space: nowrap; flex: none;">{rec_display}</div>
                 </div>
                 <div class="analyst-item">
-                    <div class="analyst-label">Price Target</div>
-                    <div class="analyst-value">${analyst_data['target_price']:,.2f}</div>
+                    <div class="analyst-label">Price Target (Mean)</div>
+                    <div class="analyst-value" style="display:flex;align-items:center;gap:8px;">
+                        <span>{tp_mean_str}</span>
+                        <span style="color:{tp_upside_color};font-weight:bold;font-size:12px;">{tp_upside_str}</span>
+                    </div>
+                </div>
+                <div class="analyst-item">
+                    <div class="analyst-label">Target Range</div>
+                    <div class="analyst-value" style="font-size:12px;color:#8b949e;">{tp_range_str}</div>
                 </div>
                 <div class="analyst-item">
                     <div class="analyst-label">Next Earnings</div>
@@ -1505,6 +1553,31 @@ def generate_html_tearsheet(ticker, company_name, financial_data, headlines, ai_
         </div>
     </div>
     
+    <!-- DCF Valuation Calculator -->
+    <div style="padding:0 24px 24px;">
+      <div class="card" style="width:100%;">
+        <div class="card-title" style="margin-bottom:16px;">DCF VALUATION CALCULATOR</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+          <div>
+            <div style="color:#8b949e;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">Model Assumptions</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="dcf-input-group"><label class="dcf-label">Revenue Growth Y1-5</label><div class="dcf-input-wrap"><input class="dcf-input" id="dcf_g1" type="number" step="0.5"><span class="dcf-unit">%</span></div></div>
+              <div class="dcf-input-group"><label class="dcf-label">Revenue Growth Y6-10</label><div class="dcf-input-wrap"><input class="dcf-input" id="dcf_g2" type="number" step="0.5"><span class="dcf-unit">%</span></div></div>
+              <div class="dcf-input-group"><label class="dcf-label">EBITDA Margin</label><div class="dcf-input-wrap"><input class="dcf-input" id="dcf_margin" type="number" step="0.5"><span class="dcf-unit">%</span></div></div>
+              <div class="dcf-input-group"><label class="dcf-label">WACC</label><div class="dcf-input-wrap"><input class="dcf-input" id="dcf_wacc" type="number" step="0.25"><span class="dcf-unit">%</span></div></div>
+              <div class="dcf-input-group"><label class="dcf-label">Terminal Growth Rate</label><div class="dcf-input-wrap"><input class="dcf-input" id="dcf_tgr" type="number" step="0.25"><span class="dcf-unit">%</span></div></div>
+              <div class="dcf-input-group"><label class="dcf-label">Tax Rate</label><div class="dcf-input-wrap"><input class="dcf-input" id="dcf_tax" type="number" step="0.5"><span class="dcf-unit">%</span></div></div>
+            </div>
+            <button onclick="runDCF()" style="margin-top:16px;background:#1f6feb;color:#fff;border:none;padding:9px 20px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;width:100%;">Run Model</button>
+            <div style="color:#8b949e;font-size:10px;margin-top:8px;line-height:1.5;">Pre-filled with trailing data. Adjust assumptions and click Run Model.</div>
+          </div>
+          <div id="dcf_output" style="display:flex;flex-direction:column;justify-content:center;align-items:center;background:#0d1117;border-radius:8px;padding:24px;min-height:200px;">
+            <div style="color:#8b949e;font-size:13px;">Click Run Model to calculate intrinsic value</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="footer">
         Generated by AI Tearsheet Tool · {datetime.now().strftime('%B %d, %Y')} · Data sourced from Yahoo Finance & NewsAPI
     </div>
@@ -1521,7 +1594,58 @@ def generate_html_tearsheet(ticker, company_name, financial_data, headlines, ai_
         const quarterlyRevenue = {revenue_json};
         const quarterlyNetIncome = {net_income_json};
         const currentTicker = "{ticker.upper()}";
-        
+
+        // DCF base data (server-injected)
+        const DCF = {{
+            revenue: {dcf_revenue},
+            cash:    {dcf_cash},
+            debt:    {dcf_debt},
+            shares:  {dcf_shares},
+            price:   {dcf_price},
+        }};
+
+        document.addEventListener("DOMContentLoaded", function() {{
+            document.getElementById("dcf_g1").value     = {dcf_g1};
+            document.getElementById("dcf_g2").value     = {dcf_g2};
+            document.getElementById("dcf_margin").value = {dcf_margin_default};
+            document.getElementById("dcf_wacc").value   = 10.0;
+            document.getElementById("dcf_tgr").value    = 3.0;
+            document.getElementById("dcf_tax").value    = 21.0;
+        }});
+
+        function runDCF() {{
+            const g1=parseFloat(document.getElementById("dcf_g1").value)/100;
+            const g2=parseFloat(document.getElementById("dcf_g2").value)/100;
+            const mg=parseFloat(document.getElementById("dcf_margin").value)/100;
+            const wc=parseFloat(document.getElementById("dcf_wacc").value)/100;
+            const tg=parseFloat(document.getElementById("dcf_tgr").value)/100;
+            const tx=parseFloat(document.getElementById("dcf_tax").value)/100;
+            const out=document.getElementById("dcf_output");
+            if(wc<=tg){{out.innerHTML='<div style="color:#f85149;font-size:13px;">WACC must exceed terminal growth rate.</div>';return;}}
+            if(!DCF.revenue||!DCF.shares){{out.innerHTML='<div style="color:#8b949e;font-size:13px;">Insufficient data for this ticker.</div>';return;}}
+            let pv=0,rev=DCF.revenue;
+            for(let yr=1;yr<=10;yr++){{rev*=(1+(yr<=5?g1:g2));pv+=rev*mg*(1-tx)/Math.pow(1+wc,yr);}}
+            const tvFCF=rev*mg*(1-tx)*(1+tg);
+            const pvTV=tvFCF/(wc-tg)/Math.pow(1+wc,10);
+            const ev=pv+pvTV;
+            const eq=ev+DCF.cash-DCF.debt;
+            const iv=eq/DCF.shares;
+            const up=((iv-DCF.price)/DCF.price)*100;
+            const uc=up>=0?"#3fb950":"#f85149";
+            const us=(up>=0?"+":"")+up.toFixed(1)+"%";
+            const lb=up>20?"UNDERVALUED":up<-20?"OVERVALUED":"FAIRLY VALUED";
+            const lc=up>20?"#3fb950":up<-20?"#f85149":"#d29922";
+            out.innerHTML='<div style="text-align:center;">'+
+              '<div class="dcf-result-label">Intrinsic Value Per Share</div>'+
+              '<div class="dcf-result-value">$'+iv.toFixed(2)+'</div>'+
+              '<div class="dcf-result-upside" style="color:'+uc+'">'+us+' vs current $'+DCF.price.toFixed(2)+'</div>'+
+              '<div style="margin-top:12px;font-size:13px;font-weight:700;color:'+lc+';letter-spacing:.08em;">'+lb+'</div>'+
+              '<div style="margin-top:16px;font-size:11px;color:#8b949e;line-height:1.6;text-align:left;border-top:1px solid #30363d;padding-top:12px;">'+
+              '<b>Enterprise Value</b> $'+(ev/1e9).toFixed(1)+'B<br>'+
+              '<b>Terminal Value</b> $'+(pvTV/1e9).toFixed(1)+'B ('+(pvTV/ev*100).toFixed(0)+'% of EV)<br>'+
+              '<b>Equity Value</b> $'+(eq/1e9).toFixed(1)+'B</div></div>';
+        }}
+
         // Tick config per period for x-axis labels
         const tickConfig = {{
             '1D':  {{ maxTicksLimit: 7,  label: 'Market hours (9:30am–4pm)' }},
@@ -2024,7 +2148,16 @@ def get_financial_data(ticker):
             'total_revenue': total_revenue,
             'eps': eps,
             'week_52_high': week_52_high,
-            'week_52_low': week_52_low
+            'week_52_low': week_52_low,
+            'free_cashflow':      info.get('freeCashflow', 'N/A'),
+            'shares_outstanding': info.get('sharesOutstanding', info.get('impliedSharesOutstanding', 'N/A')),
+            'total_cash':         info.get('totalCash', 'N/A'),
+            'total_debt':         info.get('totalDebt', 'N/A'),
+            'revenue_growth':     info.get('revenueGrowth', 'N/A'),
+            'ebitda_margins':     info.get('ebitdaMargins', 'N/A'),
+            'target_mean_price':  info.get('targetMeanPrice', 'N/A'),
+            'target_high_price':  info.get('targetHighPrice', 'N/A'),
+            'target_low_price':   info.get('targetLowPrice', 'N/A'),
         }
         
         # Fetch enhanced statistics
@@ -2321,27 +2454,19 @@ def chart_data():
         yf = install_yfinance()
         t = yf.Ticker(ticker)
         hist = t.history(period=yf_period, interval=interval)
-        sp = yf.Ticker('^GSPC').history(period=yf_period, interval=interval)
+        sp = yf.Ticker('^GSPC').history(period=yf_period('^GSPC').history(period=yf_period, interval=interval)
         
         if period == '1D':
-            # Filter to market hours only (9:30 AM - 4:00 PM)
-            market_hours = []
-            market_prices = []
-            market_sp = []
+            market_hours = []; market_prices = []; market_sp = []
             for i, dt in enumerate(hist.index):
-                hour = dt.hour
-                minute = dt.minute
+                hour = dt.hour; minute = dt.minute
                 time_val = hour * 100 + minute
                 if 930 <= time_val <= 1600:
-                    # Format as "9:30", "10:00" (no leading zero for hours)
                     market_hours.append(f"{hour}:{minute:02d}")
                     market_prices.append(round(float(hist['Close'].iloc[i]), 2))
                     market_sp.append(round(float(sp['Close'].iloc[i]), 2))
-            dates = market_hours
-            stock_prices = market_prices
-            sp500_levels = market_sp
+            dates = market_hours; stock_prices = market_prices; sp500_levels = market_sp
         elif period == '5D':
-            # Format as "May 20 9:30"
             dates = [d.strftime('%b %d %H:%M') for d in hist.index]
             stock_prices = [round(float(p), 2) for p in hist['Close']]
             sp500_levels = [round(float(p), 2) for p in sp['Close']]
@@ -2350,33 +2475,21 @@ def chart_data():
             stock_prices = [round(float(p), 2) for p in hist['Close']]
             sp500_levels = [round(float(p), 2) for p in sp['Close']]
         
-        # align lengths
         min_len = min(len(dates), len(stock_prices), len(sp500_levels))
-        dates = dates[:min_len]
-        stock_prices = stock_prices[:min_len]
-        sp500_levels = sp500_levels[:min_len]
+        dates = dates[:min_len]; stock_prices = stock_prices[:min_len]; sp500_levels = sp500_levels[:min_len]
         
-        # data thinning
         if len(dates) > max_points:
             step = len(dates) // max_points
-            dates = dates[::step]
-            stock_prices = stock_prices[::step]
-            sp500_levels = sp500_levels[::step]
+            dates = dates[::step]; stock_prices = stock_prices[::step]; sp500_levels = sp500_levels[::step]
         
-        # calculate tight y-axis bounds
         stock_min = min(stock_prices) * 0.995 if stock_prices else 0
         stock_max = max(stock_prices) * 1.005 if stock_prices else 0
         sp_min = min(sp500_levels) * 0.995 if sp500_levels else 0
         sp_max = max(sp500_levels) * 1.005 if sp500_levels else 0
         
         chart_result = {
-            'dates': dates,
-            'stock_prices': stock_prices,
-            'sp500_levels': sp500_levels,
-            'stock_min': stock_min,
-            'stock_max': stock_max,
-            'sp_min': sp_min,
-            'sp_max': sp_max
+            'dates': dates, 'stock_prices': stock_prices, 'sp500_levels': sp500_levels,
+            'stock_min': stock_min, 'stock_max': stock_max, 'sp_min': sp_min, 'sp_max': sp_max
         }
         set_cached(chart_cache_key, chart_result)
         return jsonify(chart_result)
