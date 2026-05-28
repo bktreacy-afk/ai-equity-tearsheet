@@ -113,7 +113,23 @@ def fetch_news_headlines(company_name, ticker=None):
             title = item.findtext('title', '').strip()
             url = item.findtext('link', '').strip()
             pub_date = item.findtext('pubDate', '').strip()
-            source = item.findtext('source', 'Yahoo Finance').strip()
+            # Extract real source domain from URL
+            try:
+                from urllib.parse import urlparse
+                domain = urlparse(url).netloc.replace('www.', '')
+                source_map = {
+                    'fool.com': 'Motley Fool', 'reuters.com': 'Reuters',
+                    'bloomberg.com': 'Bloomberg', 'wsj.com': 'Wall Street Journal',
+                    'cnbc.com': 'CNBC', 'ft.com': 'Financial Times',
+                    'barrons.com': 'Barron\'s', 'marketwatch.com': 'MarketWatch',
+                    'seekingalpha.com': 'Seeking Alpha', 'benzinga.com': 'Benzinga',
+                    'finance.yahoo.com': 'Yahoo Finance', 'investopedia.com': 'Investopedia',
+                    'businessinsider.com': 'Business Insider', 'fortune.com': 'Fortune',
+                    'forbes.com': 'Forbes',
+                }
+                source = next((v for k, v in source_map.items() if k in domain), domain)
+            except:
+                source = 'Yahoo Finance'
             if not title or not url or url in seen_urls:
                 continue
             seen_urls.add(url)
@@ -121,7 +137,7 @@ def fetch_news_headlines(company_name, ticker=None):
                 'title': title,
                 'published_at': pub_date,
                 'url': url,
-                'source': source if source else 'Yahoo Finance'
+                'source': source
             })
             if len(headlines) >= 5:
                 break
@@ -981,9 +997,9 @@ def generate_html_tearsheet(ticker, company_name, financial_data, headlines, ai_
         }}
         
         .container {{
-            max-width: 1400px;
+            max-width: 100%;
             margin: 0 auto;
-            padding: 30px;
+            padding: 20px 24px;
             padding-bottom: 60px;
             display: flex;
             align-items: flex-start;
@@ -1105,12 +1121,11 @@ def generate_html_tearsheet(ticker, company_name, financial_data, headlines, ai_
         }}
         
         .news-card {{
-            overflow-y: auto;
             flex-shrink: 0;
             position: relative;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+            max-height: 480px;
         }}
         
         .news-card .card-title {{
@@ -1133,6 +1148,7 @@ def generate_html_tearsheet(ticker, company_name, financial_data, headlines, ai_
         .news-scroll-content {{
             overflow-y: auto;
             margin-top: 65px;
+            max-height: 400px;
         }}
         
         .stat-item {{
