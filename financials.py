@@ -243,16 +243,8 @@ def fetch_ytd_performance(ticker):
         sp500_first_close = sp500_data['Close'].iloc[0]
         sp500_indexed = [round((price / sp500_first_close) * 100, 2) for price in sp500_data['Close']]
         
-        # Prepare data for chart - monthly labels only
-        # Only label the first trading day of each month
-        dates = []
-        last_month = None
-        for dt in stock_data.index:
-            if dt.month != last_month:
-                dates.append(dt.strftime('%b'))
-                last_month = dt.month
-            else:
-                dates.append('')
+        # Use ISO date strings — same format as /chart_data endpoint
+        dates = [str(d.date()) for d in stock_data.index]
         
         return {
             'dates': dates,
@@ -1526,62 +1518,96 @@ def generate_html_tearsheet(ticker, company_name, financial_data, headlines, ai_
             'All': {{ maxTicksLimit: 8,  label: 'Years' }},
         }};
         
-        // Tick callback function to filter labels per period
+        // Tick callback — controls x-axis labels per period
+        // Data formats: 1D="9:30","10:00" | 5D="May 20 09:30" | others="YYYY-MM-DD"
         function getTickCallback(period, allLabels) {{
             let lastShown = null;
-
             return function(val, index, ticks) {{
                 const label = allLabels[index];
                 if (!label) return null;
 
-                if (period === '6M' || period === 'YTD') {{
-                    // Show first occurrence of each month only
-                    const yearMonth = label.substring(0, 7); // "2026-01"
+                // --- 1D: show 9:30 open + whole hours only ---
+                if (period === '1D') {{
+                    return (label === '9:30' || label.endsWith(':00')) ? label : null;
+                }}
+
+                // --- 5D: show one label per day (first 30min bar of each day) ---
+                if (period === '5D') {{
+                    // labels like "May 20 09:30" — show "May 20" for first bar of each day
+                    const dayKey = label.substring(0, 6); // "May 20"
+                    if (dayKey !== lastShown) {{
+                        lastShown = dayKey;
+                        return label.substring(0, 6);
+                    }}
+                    return null;
+                }}
+
+                // All other periods use YYYY-MM-DD format
+                const parts = label.split('-');
+                if (parts.length < 3) return null;
+                const year = parseInt(parts[0]);
+                const month = parseInt(parts[1]);
+                const day = parseInt(parts[2]);
+                const d = new Date(label + 'T12:00:00');
+                const monthName = d.toLocaleDateString('en-US', {{ month: 'short' }});
+                const shortYear = "'" + String(year).slice(2);
+                const yearMonth = label.substring(0, 7);
+
+                // --- 1M: ~5 evenly spaced labels (index-based, avoids date math bugs) ---
+                if (period === '1M') {{
+                    const n = allLabels.length;
+                    const step = Math.max(1, Math.floor(n / 4));
+                    if (index % step === 0) {{
+                        return monthName + ' ' + day;
+                    }}
+                    return null;
+                }}
+
+                // --- 6M: show first of each month with short year (spans years) ---
+                if (period === '6M') {{
                     if (yearMonth !== lastShown) {{
                         lastShown = yearMonth;
-                        const d = new Date(label + 'T12:00:00');
-                        return d.toLocaleDateString('en-US', {{ month: 'short' }});
+                        return monthName + ' ' + shortYear;
                     }}
                     return null;
                 }}
 
+                // --- YTD: show first of each month, just month name (same year) ---
+                if (period === 'YTD') {{
+                    if (yearMonth !== lastShown) {{
+                        lastShown = yearMonth;
+                        return monthName;
+                    }}
+                    return null;
+                }}
+
+                // --- 1Y: show every other month with short year ---
                 if (period === '1Y') {{
-                    // Show first occurrence of every other month (Jan,Mar,May,Jul,Sep,Nov)
-                    const month = parseInt(label.split('-')[1]);
-                    const yearMonth = label.substring(0, 7);
                     if ([1,3,5,7,9,11].includes(month) && yearMonth !== lastShown) {{
                         lastShown = yearMonth;
-                        const d = new Date(label + 'T12:00:00');
-                        return d.toLocaleDateString('en-US', {{ month: 'short' }});
+                        return monthName + ' ' + shortYear;
                     }}
                     return null;
                 }}
 
+                // --- 5Y: one label per year (first data point of each calendar year) ---
                 if (period === '5Y') {{
-                    // Show first occurrence of each quarter (Jan, Apr, Jul, Oct) with short year
-                    const month = parseInt(label.split('-')[1]);
-                    const yearQuarter = label.substring(0, 4) + '-Q' + Math.ceil(month/3);
-                    if ([1,4,7,10].includes(month) && yearQuarter !== lastShown) {{
-                        lastShown = yearQuarter;
-                        const d = new Date(label + 'T12:00:00');
-                        return d.toLocaleDateString('en-US', {{ month: 'short', year: '2-digit' }});
+                    const yearKey = String(year);
+                    if (yearKey !== lastShown) {{
+                        lastShown = yearKey;
+                        return yearKey;
                     }}
                     return null;
                 }}
 
-                // 1D and 5D cases — keep exactly as they are now
-                if (period === '1D') {{
-                    return (label.endsWith(':00') || label === '9:30') ? label : null;
-                }}
-                if (period === '5D') {{
-                    return label.includes('9:30') ? label.split(' ').slice(0,2).join(' ') : null;
-                }}
-
+                // --- All: one label every 5 years, anchored to Jan of years divisible by 5 ---
                 if (period === 'All') {{
-                    const month = parseInt(label.split('-')[1]);
-                    const day = parseInt(label.split('-')[2]);
-                    if (month === 1 && day <= 15) {{
-                        return label.split('-')[0];
+                    if (month === 1 && year % 5 === 0) {{
+                        const yearKey = String(year);
+                        if (yearKey !== lastShown) {{
+                            lastShown = yearKey;
+                            return yearKey;
+                        }}
                     }}
                     return null;
                 }}
