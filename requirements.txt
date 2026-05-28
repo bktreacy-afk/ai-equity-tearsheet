@@ -4,3 +4,4 @@ newsapi-python
 anthropic
 python-dotenv
 numpy
+gunicorn

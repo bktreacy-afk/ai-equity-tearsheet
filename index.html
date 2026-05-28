@@ -97,6 +97,29 @@
         .examples span:hover {
             color: #4094ff;
         }
+
+        .error-message {
+            color: #f85149;
+            font-size: 14px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .random-button {
+            padding: 15px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #ffffff;
+            background-color: #58a6ff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .random-button:hover {
+            background-color: #4094ff;
+        }
     </style>
 </head>
 <body>
@@ -104,10 +127,13 @@
         <h1>Financial Tearsheet</h1>
         <p class="subtitle">Enter a stock ticker to view comprehensive financial analysis</p>
         
-        <form action="/tearsheet" method="GET" class="search-container">
-            <input type="text" name="ticker" placeholder="Enter stock ticker (e.g., AAPL, GOOGL, MSFT)" required>
+        <form action="/tearsheet" method="GET" class="search-container" onsubmit="return validateForm(event)">
+            <input type="text" id="tickerInput" name="ticker" placeholder="Enter stock ticker (e.g., AAPL, GOOGL, MSFT)" required>
             <button type="submit">Search</button>
+            <button type="button" class="random-button" onclick="randomTicker()">Random</button>
         </form>
+        
+        <div id="errorMessage" class="error-message"></div>
         
         <div class="examples">
             Try: <span onclick="search('AAPL')">AAPL</span>
@@ -118,8 +144,65 @@
     </div>
 
     <script>
+        const RANDOM_TICKERS = [
+            'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA', 'BRK-B',
+            'JPM', 'GS', 'MS', 'BAC', 'WFC', 'V', 'MA',
+            'JNJ', 'UNH', 'PFE', 'ABBV',
+            'XOM', 'CVX', 'COP',
+            'WMT', 'COST', 'HD', 'MCD', 'NKE',
+            'DIS', 'NFLX', 'SPOT', 'UBER', 'ABNB',
+            'LMT', 'RTX', 'BA',
+            'AMT', 'PLD', 'SPG'
+        ];
+
         function search(ticker) {
             window.location.href = `/tearsheet?ticker=${ticker}`;
+        }
+
+        function randomTicker() {
+            const randomIndex = Math.floor(Math.random() * RANDOM_TICKERS.length);
+            const ticker = RANDOM_TICKERS[randomIndex];
+            document.getElementById('tickerInput').value = ticker;
+            window.location.href = `/tearsheet?ticker=${ticker}`;
+        }
+
+        function validateForm(event) {
+            event.preventDefault();
+            const input = document.getElementById('tickerInput');
+            const errorMessage = document.getElementById('errorMessage');
+            const ticker = input.value.trim().toUpperCase();
+            
+            // Clear previous error
+            errorMessage.style.display = 'none';
+            
+            // Check if empty
+            if (!ticker) {
+                errorMessage.textContent = 'Please enter a ticker symbol';
+                errorMessage.style.display = 'block';
+                return false;
+            }
+            
+            // Check length
+            if (ticker.length > 10) {
+                errorMessage.textContent = 'Ticker symbols are typically 1-5 characters';
+                errorMessage.style.display = 'block';
+                return false;
+            }
+            
+            // Check for invalid characters (only allow letters, numbers, dots, and dashes)
+            const validPattern = /^[A-Z0-9.-]+$/;
+            if (!validPattern.test(ticker)) {
+                errorMessage.textContent = 'Please enter a valid ticker symbol';
+                errorMessage.style.display = 'block';
+                return false;
+            }
+            
+            // Update input value with uppercase
+            input.value = ticker;
+            
+            // Submit form
+            event.target.submit();
+            return true;
         }
     </script>
 </body>
