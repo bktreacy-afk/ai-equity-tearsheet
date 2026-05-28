@@ -94,67 +94,46 @@ def get_newsapi_key():
         raise FileNotFoundError(f"api_keys.txt not found at {api_key_path}")
 
 def fetch_news_headlines(company_name, ticker=None):
-    """Fetch 5 most recent news headlines for the company"""
+    """Fetch recent news using yfinance built-in news (no API key needed)"""
     try:
-        NewsApiClient = install_newsapi()
-        api_key = NEWS_API_KEY
-        if not api_key:
+        yf = install_yfinance()
+        if not ticker:
             return []
-        newsapi = NewsApiClient(api_key=api_key)
-        
-        junk_keywords = ['pypi', 'github.com', 'assembler', 'npm', 'voiceflow', 'risc-v', 'added to pypi', 'release 1.', 'v1.', 'v2.', 'programming', 'developer', 'code', 'tutorial', 'how to', 'learn', 'course', 'python package', 'library', 'framework', 'api documentation', 'documentation', 'readme', 'github repo', 'source code', 'open source', 'stack overflow', 'stackoverflow']
-        
-        # Try multiple query strategies
-        queries_to_try = []
-        if company_name and company_name != 'N/A':
-            queries_to_try.append(f'"{company_name}"')
-        if ticker:
-            queries_to_try.append(f'{ticker} stock')
-        if company_name and company_name != 'N/A' and len(company_name.split()) > 1:
-            queries_to_try.append(company_name.split()[0] + ' ' + company_name.split()[-1])
-        if ticker:
-            queries_to_try.append(ticker)
-        
+        stock = yf.Ticker(ticker)
+        raw_news = stock.news
+        if not raw_news:
+            return []
+        junk_keywords = ['pypi', 'github.com', 'npm', 'programming', 'tutorial',
+                        'how to', 'learn', 'course', 'documentation', 'source code']
         headlines = []
-        
-        for query in queries_to_try:
-            response = newsapi.get_everything(
-                q=query,
-                language='en',
-                sort_by='publishedAt',
-                page_size=50
-            )
-            
-            if response['status'] == 'ok' and response['totalResults'] > 0:
-                seen_urls = set()
-                filtered_articles = []
-                for article in response['articles']:
-                    url = article.get('url', '')
-                    title = article.get('title', '').lower()
-                    # Only skip if title contains 2+ junk keywords (less aggressive)
-                    junk_count = sum(1 for kw in junk_keywords if kw in title)
-                    if url not in seen_urls and junk_count < 2:
-                        seen_urls.add(url)
-                        filtered_articles.append(article)
-                
-                # Stop if we have at least 3 articles
-                if len(filtered_articles) >= 3:
-                    filtered_articles = filtered_articles[:5]
-                    
-                    for article in filtered_articles:
-                        headline = {
-                            'title': article['title'],
-                            'published_at': article['publishedAt'],
-                            'url': article['url'],
-                            'source': article.get('source', {}).get('name', 'Unknown')
-                        }
-                        headlines.append(headline)
-                    break
-        
+        seen_urls = set()
+        for article in raw_news[:15]:
+            content = article.get('content', {})
+            if content:
+                title = content.get('title', '')
+                url = content.get('canonicalUrl', {}).get('url', '') if isinstance(content.get('canonicalUrl'), dict) else ''
+                pub_date = content.get('pubDate', '')
+                source = content.get('provider', {}).get('displayName', 'Unknown') if isinstance(content.get('provider'), dict) else 'Unknown'
+            else:
+                title = article.get('title', '')
+                url = article.get('link', article.get('url', ''))
+                pub_date = article.get('providerPublishTime', '')
+                source = article.get('publisher', 'Unknown')
+            if not title or not url or url in seen_urls:
+                continue
+            junk_count = sum(1 for kw in junk_keywords if kw in title.lower())
+            if junk_count >= 2:
+                continue
+            if isinstance(pub_date, (int, float)):
+                from datetime import datetime
+                pub_date = datetime.fromtimestamp(pub_date).isoformat()
+            seen_urls.add(url)
+            headlines.append({'title': title, 'published_at': str(pub_date), 'url': url, 'source': source})
+            if len(headlines) >= 5:
+                break
         return headlines
-        
     except Exception as e:
-        print(f"Error fetching news headlines: {e}")
+        print(f"Error fetching news: {e}")
         return []
 
 def get_ai_analyst_summary(company_name, financial_data, headlines):
