@@ -94,47 +94,40 @@ def get_newsapi_key():
         raise FileNotFoundError(f"api_keys.txt not found at {api_key_path}")
 
 def fetch_news_headlines(company_name, ticker=None):
-    """Fetch recent news using yfinance built-in news (no API key needed)"""
+    """Fetch recent news via Yahoo Finance RSS feed"""
+    import xml.etree.ElementTree as ET
+    headlines = []
     try:
-        yf = install_yfinance()
         if not ticker:
             return []
-        stock = yf.Ticker(ticker)
-        raw_news = stock.news
-        if not raw_news:
+        rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US"
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        resp = requests.get(rss_url, headers=headers, timeout=10)
+        if resp.status_code != 200:
             return []
-        junk_keywords = ['pypi', 'github.com', 'npm', 'programming', 'tutorial',
-                        'how to', 'learn', 'course', 'documentation', 'source code']
-        headlines = []
+        root = ET.fromstring(resp.content)
+        ns = {'media': 'http://search.yahoo.com/mrss/'}
+        items = root.findall('.//item')
         seen_urls = set()
-        for article in raw_news[:15]:
-            content = article.get('content', {})
-            if content:
-                title = content.get('title', '')
-                url = content.get('canonicalUrl', {}).get('url', '') if isinstance(content.get('canonicalUrl'), dict) else ''
-                pub_date = content.get('pubDate', '')
-                source = content.get('provider', {}).get('displayName', 'Unknown') if isinstance(content.get('provider'), dict) else 'Unknown'
-            else:
-                title = article.get('title', '')
-                url = article.get('link', article.get('url', ''))
-                pub_date = article.get('providerPublishTime', '')
-                source = article.get('publisher', 'Unknown')
+        for item in items[:10]:
+            title = item.findtext('title', '').strip()
+            url = item.findtext('link', '').strip()
+            pub_date = item.findtext('pubDate', '').strip()
+            source = item.findtext('source', 'Yahoo Finance').strip()
             if not title or not url or url in seen_urls:
                 continue
-            junk_count = sum(1 for kw in junk_keywords if kw in title.lower())
-            if junk_count >= 2:
-                continue
-            if isinstance(pub_date, (int, float)):
-                from datetime import datetime
-                pub_date = datetime.fromtimestamp(pub_date).isoformat()
             seen_urls.add(url)
-            headlines.append({'title': title, 'published_at': str(pub_date), 'url': url, 'source': source})
+            headlines.append({
+                'title': title,
+                'published_at': pub_date,
+                'url': url,
+                'source': source if source else 'Yahoo Finance'
+            })
             if len(headlines) >= 5:
                 break
-        return headlines
     except Exception as e:
         print(f"Error fetching news: {e}")
-        return []
+    return headlines
 
 def get_ai_analyst_summary(company_name, financial_data, headlines):
     """Send financial data and news to Claude API for analyst summary"""
@@ -466,7 +459,12 @@ def generate_html_tearsheet(ticker, company_name, financial_data, headlines, ai_
             dt = datetime.fromisoformat(pub_date.replace('Z', '+00:00'))
             return dt.strftime('%B %d, %Y')
         except:
-            return pub_date[:10]
+            try:
+                from email.utils import parsedate_to_datetime
+                dt = parsedate_to_datetime(pub_date)
+                return dt.strftime('%B %d, %Y')
+            except:
+                return pub_date[:16] if pub_date else ''
     
     # Format change percentage with color
     def format_change(change):
