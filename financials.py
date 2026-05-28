@@ -611,7 +611,7 @@ def generate_html_tearsheet(ticker, company_name, financial_data, headlines, ai_
             if mc >= 1e12:
                 mc_formatted = f"{mc / 1e12:.1f}B"
             elif mc >= 1e9:
-                mc_formatted = f"{mc / 1e9:.0f}M"
+                mc_formatted = f"{mc / 1e9:.0f}B"
             else:
                 mc_formatted = f"{mc / 1e6:.0f}M"
         except:
