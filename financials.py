@@ -2454,7 +2454,7 @@ def chart_data():
         yf = install_yfinance()
         t = yf.Ticker(ticker)
         hist = t.history(period=yf_period, interval=interval)
-        sp = yf.Ticker('^GSPC').history(period=yf_period('^GSPC').history(period=yf_period, interval=interval)
+        sp = yf.Ticker('^GSPC').history(period=yf_period, interval=interval)
         
         if period == '1D':
             market_hours = []; market_prices = []; market_sp = []
