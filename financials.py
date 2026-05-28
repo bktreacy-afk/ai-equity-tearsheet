@@ -108,12 +108,26 @@ def fetch_news_headlines(company_name, ticker=None):
         root = ET.fromstring(resp.content)
         ns = {'media': 'http://search.yahoo.com/mrss/'}
         items = root.findall('.//item')
+        # Build relevance keywords from ticker and company name
+        ticker_upper = ticker.upper()
+        company_words = [w.lower() for w in company_name.split() if len(w) > 3 and w.lower() not in ('inc.', 'corp.', 'the', 'and', 'inc', 'corp', 'ltd', 'llc', 'plc', 'group', 'holdings', 'company')] if company_name else []
+
+        def is_relevant(title):
+            t = title.lower()
+            if ticker_upper.lower() in t:
+                return True
+            for word in company_words[:3]:  # check first 3 meaningful words
+                if word in t:
+                    return True
+            return False
+
         seen_urls = set()
-        for item in items[:10]:
+        relevant = []
+        fallback = []
+        for item in items[:15]:
             title = item.findtext('title', '').strip()
             url = item.findtext('link', '').strip()
             pub_date = item.findtext('pubDate', '').strip()
-            # Extract real source domain from URL
             try:
                 from urllib.parse import urlparse
                 domain = urlparse(url).netloc.replace('www.', '')
@@ -133,14 +147,16 @@ def fetch_news_headlines(company_name, ticker=None):
             if not title or not url or url in seen_urls:
                 continue
             seen_urls.add(url)
-            headlines.append({
-                'title': title,
-                'published_at': pub_date,
-                'url': url,
-                'source': source
-            })
-            if len(headlines) >= 5:
-                break
+            entry = {'title': title, 'published_at': pub_date, 'url': url, 'source': source}
+            if is_relevant(title):
+                relevant.append(entry)
+            else:
+                fallback.append(entry)
+
+        # Prefer relevant articles; fill remaining slots with fallback
+        headlines = relevant[:5]
+        if len(headlines) < 5:
+            headlines += fallback[:5 - len(headlines)]
     except Exception as e:
         print(f"Error fetching news: {e}")
     return headlines
@@ -2295,6 +2311,12 @@ def chart_data():
     }
     yf_period = period_map.get(period, 'ytd')
     
+    # Cache chart data for 5 minutes to avoid re-fetching on every period click
+    chart_cache_key = f"chart_{ticker}_{period}"
+    cached_chart = get_cached(chart_cache_key)
+    if cached_chart:
+        return jsonify(cached_chart)
+
     try:
         yf = install_yfinance()
         t = yf.Ticker(ticker)
@@ -2347,7 +2369,7 @@ def chart_data():
         sp_min = min(sp500_levels) * 0.995 if sp500_levels else 0
         sp_max = max(sp500_levels) * 1.005 if sp500_levels else 0
         
-        return jsonify({
+        chart_result = {
             'dates': dates,
             'stock_prices': stock_prices,
             'sp500_levels': sp500_levels,
@@ -2355,7 +2377,9 @@ def chart_data():
             'stock_max': stock_max,
             'sp_min': sp_min,
             'sp_max': sp_max
-        })
+        }
+        set_cached(chart_cache_key, chart_result)
+        return jsonify(chart_result)
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
